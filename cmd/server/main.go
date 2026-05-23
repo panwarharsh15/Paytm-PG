@@ -61,8 +61,8 @@ func main() {
 	if err := db.AutoMigrate(
 		&models.User{},
 		&models.Wallet{},
-		&models.Transaction{},
 		&models.Payment{},
+		&models.Transaction{},
 		&models.RefreshToken{},
 	); err != nil {
 		appLogger.Fatal("Auto migration failed", "error", err)
