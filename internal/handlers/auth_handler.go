@@ -1,12 +1,14 @@
 package handlers
 
 import (
-	"errors"
 	"net/http"
+
+	"errors"
 
 	"github.com/gin-gonic/gin"
 	"github.com/paytm-pg/backend/internal/services"
 	"github.com/paytm-pg/backend/internal/utils"
+	"gorm.io/gorm"
 )
 
 type AuthHandler struct {
@@ -17,14 +19,6 @@ func NewAuthHandler(authService services.AuthService) *AuthHandler {
 	return &AuthHandler{authService: authService}
 }
 
-// Register godoc
-// @Summary Register a new user
-// @Tags auth
-// @Accept json
-// @Produce json
-// @Param request body services.RegisterRequest true "Registration data"
-// @Success 201 {object} utils.APIResponse
-// @Router /auth/register [post]
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req services.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -51,14 +45,6 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	})
 }
 
-// Login godoc
-// @Summary Login with email and password
-// @Tags auth
-// @Accept json
-// @Produce json
-// @Param request body services.LoginRequest true "Login credentials"
-// @Success 200 {object} utils.APIResponse
-// @Router /auth/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req services.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -112,7 +98,6 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
-	// Refresh token revocation would go here
 	utils.OK(c, gin.H{"message": "logged out successfully"})
 }
 
@@ -146,9 +131,10 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 	utils.OK(c, user)
 }
 
-// ─── Health Checks (used by Kubernetes liveness/readiness probes) ────────────
+// ── Health checks — used by Kubernetes liveness/readiness probes ─────────────
+// Using *gorm.DB directly — clean and correct
 
-func HealthCheck(db interface{ DB() (interface{ Ping() error }, error) }) gin.HandlerFunc {
+func HealthCheck(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "ok",
@@ -157,14 +143,20 @@ func HealthCheck(db interface{ DB() (interface{ Ping() error }, error) }) gin.Ha
 	}
 }
 
-func ReadinessCheck(db interface{ DB() (interface{ Ping() error }, error) }) gin.HandlerFunc {
+func ReadinessCheck(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Check DB connectivity
 		sqlDB, err := db.DB()
-		if err != nil || sqlDB.Ping() != nil {
+		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"status": "not ready",
-				"reason": "database unavailable",
+				"reason": "cannot get sql.DB from gorm",
+			})
+			return
+		}
+		if err := sqlDB.Ping(); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status": "not ready",
+				"reason": "database ping failed",
 			})
 			return
 		}
@@ -174,7 +166,6 @@ func ReadinessCheck(db interface{ DB() (interface{ Ping() error }, error) }) gin
 
 func MetricsHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// In production: expose Prometheus metrics here using promhttp.Handler()
 		c.JSON(http.StatusOK, gin.H{"status": "metrics endpoint - integrate prometheus"})
 	}
 }
