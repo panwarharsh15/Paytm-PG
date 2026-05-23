@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/paytm-pg/backend/internal/models"
@@ -17,7 +16,7 @@ import (
 type AddMoneyRequest struct {
 	Amount      float64 `json:"amount" binding:"required,gt=0,lte=100000"`
 	Description string  `json:"description"`
-	ReferenceID string  `json:"reference_id" binding:"required"` // idempotency key from client
+	ReferenceID string  `json:"reference_id" binding:"required"`
 }
 
 type WithdrawRequest struct {
@@ -73,15 +72,14 @@ func (s *walletService) GetBalance(ctx context.Context, userID uuid.UUID) (*Wall
 // AddMoney credits the wallet inside a DB transaction.
 // Idempotency: if ReferenceID already exists, returns existing transaction (no double credit).
 func (s *walletService) AddMoney(ctx context.Context, userID uuid.UUID, req AddMoneyRequest) (*models.Transaction, error) {
-	// Idempotency check — critical for payment systems
+	// Idempotency check
 	if existing, err := s.txnRepo.FindByReferenceID(ctx, req.ReferenceID); err == nil {
-		return existing, nil // Already processed — return same result
+		return existing, nil
 	}
 
 	var result *models.Transaction
 
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Lock the wallet row to prevent concurrent modifications
 		wallet, err := s.walletRepo.FindByUserID(ctx, userID)
 		if err != nil {
 			return err
@@ -180,5 +178,4 @@ var (
 	ErrInsufficientBalance = errors.New("insufficient wallet balance")
 	ErrWalletLocked        = errors.New("wallet is locked due to suspicious activity")
 	ErrWalletNotFound      = errors.New("wallet not found")
-	_ time.Time // imported for future use
 )
